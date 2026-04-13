@@ -1,46 +1,73 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Invoice, InvoiceItem, Client } from '../types';
 import { BANK_ACCOUNTS } from '../types';
 import { storage } from '../lib/storage';
-import { Plus, Trash2, Printer, Save } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, FilePlus } from 'lucide-react';
 import { PrintableInvoice } from './PrintableInvoice';
 
-export function InvoiceEditor() {
-    const [clients, setClients] = useState<Client[]>([]);
+interface Props {
+    initialInvoice?: Invoice | null;
+    onInvoiceSaved?: () => void;
+    onClearEdit?: () => void;
+}
 
-    const generateNextInvoiceNumber = () => {
+export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: Props) {
+    const [clients, setClients] = useState<Client[]>([]);
+    const draftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isInitialLoad = useRef(true);
+
+    const generateNextInvoiceNumber = useCallback(() => {
         const invoices = storage.getInvoices();
         const currentYear = new Date().getFullYear().toString();
-        
+
         if (invoices.length === 0) {
             return currentYear + '001';
         }
 
-        // Zkusíme najít nejvyšší číslo faktury pro aktuální rok
         const thisYearInvoices = invoices.filter(inv => inv.number.startsWith(currentYear));
-        
+
         if (thisYearInvoices.length === 0) {
             return currentYear + '001';
         }
 
         const highestNumber = Math.max(...thisYearInvoices.map(inv => parseInt(inv.number.slice(-3)) || 0));
         const nextSequence = (highestNumber + 1).toString().padStart(3, '0');
-        
-        return currentYear + nextSequence;
-    };
 
-    // Invoice State
-    const [invoice, setInvoice] = useState<Invoice>({
+        return currentYear + nextSequence;
+    }, []);
+
+    const createBlankInvoice = useCallback((keepClientId?: string, keepBankAccount?: string): Invoice => ({
         id: crypto.randomUUID(),
         number: generateNextInvoiceNumber(),
-        clientId: '',
+        clientId: keepClientId || '',
         issueDate: new Date().toISOString().split('T')[0],
         dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        bankAccount: 'personal',
+        bankAccount: keepBankAccount || 'personal',
+        paid: false,
         items: [
             { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'ks', unitPrice: 0 }
         ]
+    }), [generateNextInvoiceNumber]);
+
+    const [invoice, setInvoice] = useState<Invoice>(() => {
+        const draft = storage.getDraft();
+        if (draft) return draft;
+        return createBlankInvoice();
     });
+
+    useEffect(() => {
+        if (initialInvoice) {
+            if (!initialInvoice.number) {
+                setInvoice({
+                    ...initialInvoice,
+                    number: generateNextInvoiceNumber()
+                });
+            } else {
+                setInvoice(initialInvoice);
+            }
+            storage.clearDraft();
+        }
+    }, [initialInvoice, generateNextInvoiceNumber]);
 
     useEffect(() => {
         const loadedClients = storage.getClients();
@@ -48,9 +75,28 @@ export function InvoiceEditor() {
         if (loadedClients.length > 0 && !invoice.clientId) {
             setInvoice(prev => ({ ...prev, clientId: loadedClients[0].id }));
         }
+        isInitialLoad.current = false;
     }, []);
 
-    const handleItemChange = (id: string, field: keyof InvoiceItem, value: any) => {
+    useEffect(() => {
+        if (isInitialLoad.current) return;
+
+        if (draftTimeoutRef.current) {
+            clearTimeout(draftTimeoutRef.current);
+        }
+
+        draftTimeoutRef.current = setTimeout(() => {
+            storage.saveDraft(invoice);
+        }, 500);
+
+        return () => {
+            if (draftTimeoutRef.current) {
+                clearTimeout(draftTimeoutRef.current);
+            }
+        };
+    }, [invoice]);
+
+    const handleItemChange = (id: string, field: keyof InvoiceItem, value: string | number) => {
         setInvoice(prev => ({
             ...prev,
             items: prev.items.map(item =>
@@ -77,52 +123,61 @@ export function InvoiceEditor() {
         return invoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
     };
 
-    const handlePrint = () => {
-        window.print();
-    };
-
-    const handleSave = () => {
+    const saveInvoiceToHistory = (): boolean => {
         if (!invoice.clientId) {
-            alert('Vyberte prosím klienta.');
-            return;
+            alert('Vyberte pros\u00edm klienta.');
+            return false;
         }
-        
+
         const invoices = storage.getInvoices();
-        
-        // Zjistíme, jestli upravujeme existující (pokud bychom měli editaci) nebo přidáváme novou
         const existingIndex = invoices.findIndex(inv => inv.id === invoice.id);
-        
+
         if (existingIndex >= 0) {
             invoices[existingIndex] = invoice;
         } else {
             invoices.push(invoice);
         }
-        
+
         storage.saveInvoices(invoices);
-        alert(`Faktura č. ${invoice.number} byla úspěšně uložena do historie!`);
-        
-        // Připravíme čistou fakturu s novým číslem
-        setInvoice(prev => ({
-            id: crypto.randomUUID(),
-            number: generateNextInvoiceNumber(),
-            clientId: prev.clientId, // necháme vybraného klienta
-            issueDate: new Date().toISOString().split('T')[0],
-            dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            bankAccount: prev.bankAccount,
-            items: [
-                { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'ks', unitPrice: 0 }
-            ]
-        }));
+        onInvoiceSaved?.();
+        return true;
     };
+
+    const handlePrint = () => {
+        if (!saveInvoiceToHistory()) return;
+        storage.clearDraft();
+        window.print();
+    };
+
+    const handleSaveAndNew = () => {
+        if (!saveInvoiceToHistory()) return;
+
+        storage.clearDraft();
+        onClearEdit?.();
+
+        const newInvoice = createBlankInvoice(invoice.clientId, invoice.bankAccount);
+        setInvoice(newInvoice);
+
+        alert(`Faktura \u010d. ${invoice.number} ulo\u017eena! Formul\u00e1\u0159 p\u0159ipraven pro novou fakturu.`);
+    };
+
+    const isEditing = initialInvoice && initialInvoice.number !== '';
 
     return (
         <div>
             <div className="card no-print">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h2>Nová Faktura</h2>
+                    <h2>{isEditing ? `\u00daprava faktury \u010d. ${invoice.number}` : 'Nov\u00e1 Faktura'}</h2>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn btn-secondary" onClick={handleSave}>
-                            <Save size={18} /> Uložit rozpracovanou
+                        <button className="btn btn-secondary" onClick={handleSaveAndNew}>
+                            <FilePlus size={18} /> Ulo\u017eit a nov\u00e1
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => {
+                            if (!saveInvoiceToHistory()) return;
+                            storage.clearDraft();
+                            alert(`Faktura \u010d. ${invoice.number} ulo\u017eena!`);
+                        }}>
+                            <Save size={18} /> Ulo\u017eit
                         </button>
                         <button className="btn btn-primary" onClick={handlePrint}>
                             <Printer size={18} /> Tisk / PDF
@@ -130,23 +185,49 @@ export function InvoiceEditor() {
                     </div>
                 </div>
 
+                {isEditing && (
+                    <div style={{
+                        padding: '0.5rem 1rem',
+                        marginBottom: '1rem',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 'var(--radius)',
+                        fontSize: '0.85rem',
+                        color: '#1e40af',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <span>\u270f\ufe0f Upravujete existuj\u00edc\u00ed fakturu. Zm\u011bny se ulo\u017e\u00ed p\u0159i tisku nebo kliknut\u00edm na Ulo\u017eit.</span>
+                        <button
+                            className="btn btn-secondary"
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                            onClick={() => {
+                                onClearEdit?.();
+                                setInvoice(createBlankInvoice(invoice.clientId, invoice.bankAccount));
+                            }}
+                        >
+                            Zru\u0161it \u00fapravu
+                        </button>
+                    </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                    {/* Left Column: Basic Info */}
                     <div style={{ display: 'grid', gap: '1rem' }}>
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Číslo faktury (VS)</label>
+                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>\u010c\u00edslo faktury (VS)</label>
                             <input
                                 type="text"
                                 style={{ width: '100%', padding: '0.5rem', fontSize: '1.2rem', fontWeight: 'bold' }}
                                 value={invoice.number}
                                 onChange={e => setInvoice({ ...invoice, number: e.target.value })}
                             />
-                            <small style={{ color: 'var(--text-secondary)' }}>Variabilní symbol bude shodný.</small>
+                            <small style={{ color: 'var(--text-secondary)' }}>Variabiln\u00ed symbol bude shodn\u00fd.</small>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Datum vystavení</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Datum vystaven\u00ed</label>
                                 <input
                                     type="date"
                                     style={{ width: '100%', padding: '0.5rem' }}
@@ -166,7 +247,7 @@ export function InvoiceEditor() {
                         </div>
 
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Bankovní účet</label>
+                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Bankovn\u00ed \u00fa\u010det</label>
                             <select
                                 style={{ width: '100%', padding: '0.5rem' }}
                                 value={invoice.bankAccount}
@@ -179,7 +260,6 @@ export function InvoiceEditor() {
                         </div>
                     </div>
 
-                    {/* Right Column: Client Selection */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem' }}>Klient</label>
                         <select
@@ -204,7 +284,7 @@ export function InvoiceEditor() {
                                             {c.city}<br />
                                             {c.country}<br />
                                             <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                                                IČO: {c.ico} / DIČ: {c.dic}
+                                                I\u010cO: {c.ico} / DI\u010c: {c.dic}
                                             </div>
                                         </>
                                     );
@@ -214,9 +294,8 @@ export function InvoiceEditor() {
                     </div>
                 </div>
 
-                {/* Items Section */}
                 <div style={{ marginTop: '2rem' }}>
-                    <h3 style={{ marginBottom: '1rem' }}>Položky faktury</h3>
+                    <h3 style={{ marginBottom: '1rem' }}>Polo\u017eky faktury</h3>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
@@ -236,7 +315,7 @@ export function InvoiceEditor() {
                                             style={{ width: '100%', padding: '0.5rem' }}
                                             value={item.description}
                                             onChange={e => handleItemChange(item.id, 'description', e.target.value)}
-                                            placeholder="Popis služby"
+                                            placeholder="Popis slu\u017eby"
                                         />
                                     </td>
                                     <td style={{ padding: '0.5rem' }}>
@@ -255,7 +334,7 @@ export function InvoiceEditor() {
                                         >
                                             <option value="ks">ks</option>
                                             <option value="hod">hod</option>
-                                            <option value="paušál">paušál</option>
+                                            <option value="pau\u0161\u00e1l">pau\u0161\u00e1l</option>
                                         </select>
                                     </td>
                                     <td style={{ padding: '0.5rem' }}>
@@ -267,7 +346,7 @@ export function InvoiceEditor() {
                                         />
                                     </td>
                                     <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                                        {(item.quantity * item.unitPrice).toLocaleString('cs-CZ')} Kč
+                                        {(item.quantity * item.unitPrice).toLocaleString('cs-CZ')} K\u010d
                                     </td>
                                     <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                         <button
@@ -283,16 +362,15 @@ export function InvoiceEditor() {
                         </tbody>
                     </table>
                     <button className="btn btn-secondary" style={{ marginTop: '1rem' }} onClick={addItem}>
-                        <Plus size={16} /> Přidat položku
+                        <Plus size={16} /> P\u0159idat polo\u017eku
                     </button>
 
                     <div style={{ marginTop: '2rem', textAlign: 'right', fontSize: '1.5rem', fontWeight: 'bold' }}>
-                        Celkem k úhradě: {calculateTotal().toLocaleString('cs-CZ')} Kč
+                        Celkem k \u00fahrad\u011b: {calculateTotal().toLocaleString('cs-CZ')} K\u010d
                     </div>
                 </div>
             </div>
 
-            {/* Printable View - Hidden on screen, Visible on print */}
             <div className="only-print">
                 <PrintableInvoice
                     invoice={invoice}
