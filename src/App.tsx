@@ -1,11 +1,54 @@
-import { FileText, Users, PlusCircle, History } from 'lucide-react';
-import { useState } from 'react';
+import { FileText, Users, PlusCircle, History, BarChart3, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import type { Invoice } from './types';
+import { storage } from './lib/storage';
 import { ClientManager } from './components/ClientManager';
 import { InvoiceEditor } from './components/InvoiceEditor';
 import { InvoiceHistory } from './components/InvoiceHistory';
+import { InvoiceStats } from './components/InvoiceStats';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'invoices' | 'clients' | 'history'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clients' | 'history' | 'stats'>('invoices');
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [overdueCount, setOverdueCount] = useState(0);
+
+  const updateOverdueCount = useCallback(() => {
+    const invoices = storage.getInvoices();
+    const today = new Date().toISOString().split('T')[0];
+    const count = invoices.filter(inv => !inv.paid && inv.dueDate < today).length;
+    setOverdueCount(count);
+  }, []);
+
+  useEffect(() => {
+    updateOverdueCount();
+  }, [activeTab, updateOverdueCount]);
+
+  const handleEditInvoice = (invoice: Invoice) => {
+    setEditingInvoice(invoice);
+    setActiveTab('invoices');
+  };
+
+  const handleDuplicateInvoice = (invoice: Invoice) => {
+    const duplicated: Invoice = {
+      ...invoice,
+      id: crypto.randomUUID(),
+      number: '',
+      issueDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      paid: false,
+      items: invoice.items.map(item => ({ ...item, id: crypto.randomUUID() }))
+    };
+    setEditingInvoice(duplicated);
+    setActiveTab('invoices');
+  };
+
+  const handleInvoiceSaved = () => {
+    updateOverdueCount();
+  };
+
+  const handleClearEdit = () => {
+    setEditingInvoice(null);
+  };
 
   return (
     <div className="container">
@@ -14,10 +57,10 @@ function App() {
           <FileText />
           <span>Fakturační Systém</span>
         </div>
-        <nav style={{ display: 'flex', gap: '1rem' }}>
+        <nav style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             className={`btn ${activeTab === 'invoices' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('invoices')}
+            onClick={() => { setEditingInvoice(null); setActiveTab('invoices'); }}
           >
             <PlusCircle size={18} />
             Nová Faktura
@@ -25,9 +68,23 @@ function App() {
           <button
             className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setActiveTab('history')}
+            style={{ position: 'relative' }}
           >
             <History size={18} />
             Historie
+            {overdueCount > 0 && (
+              <span className="badge-overdue" title={`${overdueCount} faktur po splatnosti`}>
+                <AlertCircle size={14} />
+                {overdueCount}
+              </span>
+            )}
+          </button>
+          <button
+            className={`btn ${activeTab === 'stats' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('stats')}
+          >
+            <BarChart3 size={18} />
+            Statistiky
           </button>
           <button
             className={`btn ${activeTab === 'clients' ? 'btn-primary' : 'btn-secondary'}`}
@@ -41,11 +98,23 @@ function App() {
 
       <main>
         {activeTab === 'invoices' && (
-          <InvoiceEditor />
+          <InvoiceEditor
+            initialInvoice={editingInvoice}
+            onInvoiceSaved={handleInvoiceSaved}
+            onClearEdit={handleClearEdit}
+          />
         )}
 
         {activeTab === 'history' && (
-          <InvoiceHistory />
+          <InvoiceHistory
+            onEdit={handleEditInvoice}
+            onDuplicate={handleDuplicateInvoice}
+            onDataChange={updateOverdueCount}
+          />
+        )}
+
+        {activeTab === 'stats' && (
+          <InvoiceStats />
         )}
 
         {activeTab === 'clients' && (

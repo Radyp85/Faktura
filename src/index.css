@@ -99,6 +99,30 @@ textarea {
   color: var(--primary);
 }
 
+/* Overdue Badge */
+.badge-overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: var(--danger);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  margin-left: 0.35rem;
+  line-height: 1;
+}
+
+/* Spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Print Styles */
 @media print {
   @page {
@@ -108,7 +132,6 @@ textarea {
   .no-print {
     display: none !important;
   }
-
 
   body {
     background: white;
