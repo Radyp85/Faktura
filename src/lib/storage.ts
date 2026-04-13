@@ -3,12 +3,12 @@ import { INITIAL_CLIENT } from '../types';
 
 const CLIENTS_KEY = 'invoice_app_clients';
 const INVOICES_KEY = 'invoice_app_invoices';
+const DRAFT_KEY = 'invoice_app_draft';
 
 export const storage = {
     getClients: (): Client[] => {
         const data = localStorage.getItem(CLIENTS_KEY);
         if (!data) {
-            // Seed initial client
             storage.saveClients([INITIAL_CLIENT]);
             return [INITIAL_CLIENT];
         }
@@ -37,5 +37,24 @@ export const storage = {
 
     saveInvoices: (invoices: Invoice[]) => {
         localStorage.setItem(INVOICES_KEY, JSON.stringify(invoices));
+    },
+
+    saveDraft: (invoice: Invoice) => {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(invoice));
+    },
+
+    getDraft: (): Invoice | null => {
+        const data = localStorage.getItem(DRAFT_KEY);
+        if (!data) return null;
+        try {
+            return JSON.parse(data);
+        } catch (e) {
+            console.error('Failed to parse draft', e);
+            return null;
+        }
+    },
+
+    clearDraft: () => {
+        localStorage.removeItem(DRAFT_KEY);
     }
 };

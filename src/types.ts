@@ -24,6 +24,7 @@ export interface Invoice {
     dueDate: string;
     bankAccount: string; // 'personal' | 'joint'
     items: InvoiceItem[];
+    paid?: boolean;
 }
 
 export const SUPPLIER = {
@@ -38,9 +39,7 @@ export const SUPPLIER = {
 };
 
 export const BANK_ACCOUNTS = [
-    // Account 1: 1721765083
     { id: 'personal', label: 'Osobní', number: '1721765083 / 0800', bank: 'Česká Spořitelna', iban: 'CZ2608000000001721765083' },
-    // Account 2: 4562085083
     { id: 'joint', label: 'Společný', number: '4562085083 / 0800', bank: 'Česká Spořitelna', iban: 'CZ1808000000004562085083' }
 ];
 
