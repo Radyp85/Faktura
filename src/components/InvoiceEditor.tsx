@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Invoice, InvoiceItem, Client } from '../types';
-import { BANK_ACCOUNTS } from '../types';
+import type { Invoice, InvoiceItem, Client, BankAccount } from '../types';
 import { storage } from '../lib/storage';
 import { Plus, Trash2, Printer, Save, FilePlus } from 'lucide-react';
 import { PrintableInvoice } from './PrintableInvoice';
@@ -13,6 +12,7 @@ interface Props {
 
 export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: Props) {
     const [clients, setClients] = useState<Client[]>([]);
+    const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const draftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isInitialLoad = useRef(true);
 
@@ -50,13 +50,16 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
     }), [generateNextInvoiceNumber]);
 
     const [invoice, setInvoice] = useState<Invoice>(() => {
+        // Check for draft first
         const draft = storage.getDraft();
         if (draft) return draft;
         return createBlankInvoice();
     });
 
+    // Handle initialInvoice prop (edit or duplicate from history)
     useEffect(() => {
         if (initialInvoice) {
+            // If number is empty, it's a duplicate \u2014 generate new number
             if (!initialInvoice.number) {
                 setInvoice({
                     ...initialInvoice,
@@ -72,12 +75,14 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
     useEffect(() => {
         const loadedClients = storage.getClients();
         setClients(loadedClients);
+        setBankAccounts(storage.getBankAccounts());
         if (loadedClients.length > 0 && !invoice.clientId) {
             setInvoice(prev => ({ ...prev, clientId: loadedClients[0].id }));
         }
         isInitialLoad.current = false;
     }, []);
 
+    // Auto-save draft (TASK 3) \u2014 debounced 500ms
     useEffect(() => {
         if (isInitialLoad.current) return;
 
@@ -123,6 +128,7 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
         return invoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
     };
 
+    // Shared save logic (TASK 1)
     const saveInvoiceToHistory = (): boolean => {
         if (!invoice.clientId) {
             alert('Vyberte pros\u00edm klienta.');
@@ -143,12 +149,14 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
         return true;
     };
 
+    // Print: save silently + print (TASK 1)
     const handlePrint = () => {
         if (!saveInvoiceToHistory()) return;
         storage.clearDraft();
         window.print();
     };
 
+    // Save & New: save + reset form (TASK 1)
     const handleSaveAndNew = () => {
         if (!saveInvoiceToHistory()) return;
 
@@ -213,6 +221,7 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                    {/* Left Column: Basic Info */}
                     <div style={{ display: 'grid', gap: '1rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem' }}>\u010c\u00edslo faktury (VS)</label>
@@ -253,13 +262,14 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
                                 value={invoice.bankAccount}
                                 onChange={e => setInvoice({ ...invoice, bankAccount: e.target.value })}
                             >
-                                {BANK_ACCOUNTS.map(acc => (
+                                {bankAccounts.map(acc => (
                                     <option key={acc.id} value={acc.id}>{acc.label} ({acc.bank})</option>
                                 ))}
                             </select>
                         </div>
                     </div>
 
+                    {/* Right Column: Client Selection */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem' }}>Klient</label>
                         <select
@@ -294,6 +304,7 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
                     </div>
                 </div>
 
+                {/* Items Section */}
                 <div style={{ marginTop: '2rem' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Polo\u017eky faktury</h3>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -371,10 +382,12 @@ export function InvoiceEditor({ initialInvoice, onInvoiceSaved, onClearEdit }: P
                 </div>
             </div>
 
+            {/* Printable View - Hidden on screen, Visible on print */}
             <div className="only-print">
                 <PrintableInvoice
                     invoice={invoice}
                     client={clients.find(c => c.id === invoice.clientId)}
+                    bankAccounts={bankAccounts}
                 />
             </div>
         </div>
