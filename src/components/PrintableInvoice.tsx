@@ -1,15 +1,16 @@
-import type { Invoice, Client } from '../types';
-import { SUPPLIER, BANK_ACCOUNTS } from '../types';
+import type { Invoice, Client, BankAccount } from '../types';
+import { SUPPLIER } from '../types';
 import { QRCodeSVG } from 'qrcode.react';
 import signatureImg from '../assets/signature.png';
 
 interface InternalProps {
     invoice: Invoice;
     client?: Client;
+    bankAccounts?: BankAccount[];
 }
 
-export function PrintableInvoice({ invoice, client }: InternalProps) {
-    const bankAccount = BANK_ACCOUNTS.find(b => b.id === invoice.bankAccount) || BANK_ACCOUNTS[0];
+export function PrintableInvoice({ invoice, client, bankAccounts = [] }: InternalProps) {
+    const bankAccount = bankAccounts.find(b => b.id === invoice.bankAccount) || bankAccounts[0] || { id: '', label: '', number: '', bank: '', iban: '' };
     const total = invoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
     // Format date
@@ -39,7 +40,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
         }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Faktura č. {invoice.number}</h1>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Faktura \u010d. {invoice.number}</h1>
                 {/* Note moved from here */}
             </div>
 
@@ -52,7 +53,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
                     <div>{SUPPLIER.address}</div>
                     <div>{SUPPLIER.city}</div>
                     <div>{SUPPLIER.country}</div>
-                    <div style={{ marginTop: '0.5rem' }}>IČO: {SUPPLIER.ico}</div>
+                    <div style={{ marginTop: '0.5rem' }}>I\u010cO: {SUPPLIER.ico}</div>
                     <div style={{ marginTop: '0.25rem', fontStyle: 'italic' }}>{SUPPLIER.note}</div>
                     <div style={{ marginTop: '0.5rem', fontSize: '0.85em' }}>
                         <div>Kontakt:</div>
@@ -63,7 +64,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
 
                 {/* Customer */}
                 <div>
-                    <h2 style={{ fontSize: '0.9rem', borderBottom: '1px solid black', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>Odběratel</h2>
+                    <h2 style={{ fontSize: '0.9rem', borderBottom: '1px solid black', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>Odb\u011bratel</h2>
                     {client ? (
                         <>
                             <div style={{ fontWeight: 'bold' }}>{client.name}</div>
@@ -71,12 +72,12 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
                             <div>{client.city}</div>
                             <div>{client.country}</div>
                             <div style={{ marginTop: '0.5rem' }}>
-                                IČO: {client.ico}<br />
-                                DIČ: {client.dic}
+                                I\u010cO: {client.ico}<br />
+                                DI\u010c: {client.dic}
                             </div>
                         </>
                     ) : (
-                        <div>(Není vybrán odběratel)</div>
+                        <div>(Nen\u00ed vybr\u00e1n odb\u011bratel)</div>
                     )}
                 </div>
             </div>
@@ -84,13 +85,13 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
             {/* Payment Details */}
             <div style={{ borderTop: '1px solid #ccc', borderBottom: '1px solid #ccc', padding: '1rem 0', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <div>Způsob platby: Bankovní převod</div>
-                    <div>Datum vystavení: {formatDate(invoice.issueDate)}</div>
+                    <div>Zp\u016fsob platby: Bankovn\u00ed p\u0159evod</div>
+                    <div>Datum vystaven\u00ed: {formatDate(invoice.issueDate)}</div>
                     <div>Datum splatnosti: {formatDate(invoice.dueDate)}</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <div>Číslo účtu: {bankAccount.number}</div>
-                    <div>Variabilní symbol: {invoice.number}</div>
+                    <div>\u010c\u00edslo \u00fa\u010dtu: {bankAccount.number}</div>
+                    <div>Variabiln\u00ed symbol: {invoice.number}</div>
                 </div>
                 <div style={{ width: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     {/* Real QR Code */}
@@ -107,7 +108,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
 
             {/* Intro Text */}
             <div style={{ marginBottom: '1rem' }}>
-                Fakturuji vám dle dohody:
+                Fakturuji v\u00e1m dle dohody:
             </div>
 
             {/* Items */}
@@ -115,7 +116,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
                 <thead>
                     <tr style={{ borderBottom: '2px solid black' }}>
                         <th style={{ textAlign: 'left', padding: '0.25rem' }}>Popis</th>
-                        <th style={{ textAlign: 'right', padding: '0.25rem' }}>Množství</th>
+                        <th style={{ textAlign: 'right', padding: '0.25rem' }}>Mno\u017estv\u00ed</th>
                         <th style={{ textAlign: 'right', padding: '0.25rem' }}>Cena za mj.</th>
                         <th style={{ textAlign: 'right', padding: '0.25rem' }}>Celkem</th>
                     </tr>
@@ -127,7 +128,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
                             <td style={{ textAlign: 'right', padding: '0.25rem' }}>{item.quantity} {item.unit}</td>
                             <td style={{ textAlign: 'right', padding: '0.25rem' }}>{item.unitPrice.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })}</td>
                             <td style={{ textAlign: 'right', padding: '0.25rem' }}>
-                                {(item.quantity * item.unitPrice).toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč
+                                {(item.quantity * item.unitPrice).toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} K\u010d
                             </td>
                         </tr>
                     ))}
@@ -136,7 +137,7 @@ export function PrintableInvoice({ invoice, client }: InternalProps) {
 
             {/* Total */}
             <div style={{ textAlign: 'right', fontSize: '1.2rem', fontWeight: 'bold', marginTop: '1rem' }}>
-                Celkem k úhradě: {total.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč
+                Celkem k \u00fahrad\u011b: {total.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} K\u010d
             </div>
 
             {/* Footer: Signature only */}
