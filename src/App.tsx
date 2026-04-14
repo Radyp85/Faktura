@@ -1,14 +1,15 @@
-import { FileText, Users, PlusCircle, History, BarChart3, AlertCircle } from 'lucide-react';
+import { FileText, Users, PlusCircle, History, BarChart3, AlertCircle, Landmark } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import type { Invoice } from './types';
 import { storage } from './lib/storage';
 import { ClientManager } from './components/ClientManager';
+import { BankAccountManager } from './components/BankAccountManager';
 import { InvoiceEditor } from './components/InvoiceEditor';
 import { InvoiceHistory } from './components/InvoiceHistory';
 import { InvoiceStats } from './components/InvoiceStats';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'invoices' | 'clients' | 'history' | 'stats'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clients' | 'accounts' | 'history' | 'stats'>('invoices');
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [overdueCount, setOverdueCount] = useState(0);
 
@@ -55,7 +56,7 @@ function App() {
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div className="logo">
           <FileText />
-          <span>Fakturační Systém</span>
+          <span>Faktura\u010dn\u00ed Syst\u00e9m</span>
         </div>
         <nav style={{ display: 'flex', gap: '0.5rem' }}>
           <button
@@ -63,7 +64,7 @@ function App() {
             onClick={() => { setEditingInvoice(null); setActiveTab('invoices'); }}
           >
             <PlusCircle size={18} />
-            Nová Faktura
+            Nov\u00e1 Faktura
           </button>
           <button
             className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
@@ -93,6 +94,13 @@ function App() {
             <Users size={18} />
             Klienti
           </button>
+          <button
+            className={`btn ${activeTab === 'accounts' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('accounts')}
+          >
+            <Landmark size={18} />
+            \u00da\u010dty
+          </button>
         </nav>
       </header>
 
@@ -119,6 +127,10 @@ function App() {
 
         {activeTab === 'clients' && (
           <ClientManager />
+        )}
+
+        {activeTab === 'accounts' && (
+          <BankAccountManager />
         )}
       </main>
     </div>
